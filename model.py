@@ -181,6 +181,9 @@ class Room(Named):
 class Direction(UniqueNamed):
     pk: ClassVar = 'name'
     key: str = field(metadata={"unique":True, "abbreviation":("name",1)}, default=None)
+    @property
+    def arrives_opposite_long_name(self):
+        return "the TBD"
     def __hash__(self):
         return hash(self.key)
 
@@ -270,6 +273,7 @@ class PlayerDefinition(MobBaseDefinition): # TODO: account, or email recovery, e
     description: str = None
     pdef_id: int = autonum('PlayerDefinition')
     password: str
+    last_room: Room
     saved_attrs: dict['Attribute',int] = field(default_factory=default_attributes) # TODO: remove this default and require on create/load
     saved_equipment: dict[EquipmentLocation, list['Object']] = field(default_factory=dict)
     # TODO: bank vault, etc.
@@ -300,14 +304,14 @@ class Mob(MobBase): # TODO: optional renamed?
 
 @kwdataclass
 class Player(MobBase):
-    # pk: ClassVar = 'pid'
-    # pid: int = autonum('Player')
-    client: InitVar[Any] = None
+    pk: ClassVar = 'player_id'
+    player_id: int = autonum('Player')
+    client_id: int
     mdef: PlayerDefinition
     attrs: dict['Attribute',int] = field(init=False, metadata={"copy2":("mdef","saved_attrs")})
-    def __post_init__(self, client):
-        super().__post_init__()
-        self.client = client
+    #def __post_init__(self, client):
+    #    super().__post_init__()
+    #    self.client = client
 
 @kwdataclass
 class ObjectReset(Base):

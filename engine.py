@@ -147,10 +147,10 @@ class Client:
     # TODO: select background...
 
     async def loop(self):
-        await self.send_line(f"\r\nWelcome, {self.player.pdef.name}!")
+        await self.send_line(f"\r\nWelcome, {self.player.mdef.name}!")
         self.state = ClientState.CONNECTED
         # TODO: do_look
-        await self.send_line(f"\r\nYou are in room {self.player.room.rdef.name}")
+        await self.send_line(f"\r\nYou are in room {self.player.room.name}")
         while self.state == ClientState.CONNECTED:
             await self.send("\rCommand: ")
             msg = await self.read_line()
@@ -162,14 +162,14 @@ class Client:
     async def handle(self, msg):
         # TODO: process commands
         if msg in ["n","s","e","w","u","d"]:
-            door = self.engine.mob_find_door(self.player, msg)
-            if door:
-                self.player = await self.engine.client_player_transit_door(self, door)
+            direction = self.engine.mob_find_door(self.player, msg)
+            if direction:
+                self.player = await self.engine.client_player_transit_door(self, self.player.room, direction)
             else:
                 await self.send_line("You see no exit in that direction.")
         elif msg == "look":
             # TODO hand to engine to actually look
-            await self.send_line(f"You are in room {self.player.room.rdef.name}.")
+            await self.send_line(f"You are in room {self.player.room.name}.")
         elif msg == "quit":
             await self.send_line("Goodbye!")
             # TODO unload from room?
@@ -186,35 +186,36 @@ class Engine:
 
     # TODO: check mob can see the door, it is not hidden, etc.
     def mob_find_door(self, mob, direction):
-            room = Room.get(id=mob.room.id)
-            for door in room.doors:
-                if door.ddef.direction.name == direction:
-                    return door
+            room = mob.room # Room.get(room_id=mob.room.room_id)
+            for d, door in room.doors.items():
+                if d.name == direction or d.key == direction:
+                    return d
             else:
                 return None
 
     # TODO: improve by providing direction names etc. from previous session
-    async def client_player_transit_door(self, client, door):
-            cplayer = Player.get(id=client.player.id)
-            door = Door.get(id=door.id)
-            for player in door.room.mobs.filter(lambda mob: isinstance(mob, Player)):
-                if player.id == client.player.id:
-                    await client.send_line(f"You leave {door.ddef.direction.long_name}.")
+    async def client_player_transit_door(self, client, room, direction):
+            cplayer = Player.get(player_id=client.player.player_id)
+            door = room.doors[direction]
+            # door = Door.get(door_id=door.id)
+            for player in filter(lambda mob: isinstance(mob, Player), room.mobs):
+                if player.player_id == client.player.player_id:
+                    await client.send_line(f"You leave {direction.name}.")
                 else:
                     # TODO check blind, hiding, sneaking, etc.
                     # mobs/rooms/objects with leaving triggers should happen FIRST
                     # out of move points, etc. happens before this method is called
                     pclient = self.clients[player.client_id]
-                    await pclient.send_line(f"{client.player.pdef.name} leaves {door.ddef.direction.long_name}.")
-            cplayer.room = Room.get(rdef=door.ddef.destination)
-            cplayer.pdef.last_room = cplayer.room.rdef
-            for player in cplayer.room.mobs.filter(lambda mob: isinstance(mob, Player)):
-                if player.id == cplayer.id:
+                    await pclient.send_line(f"{client.player.mdef.name} leaves {direction.name}.")
+            cplayer.room = door.destination # Room.get(rdef=door.ddef.destination)
+            cplayer.mdef.last_room = cplayer.room
+            for player in filter(lambda mob: isinstance(mob, Player), cplayer.room.mobs):
+                if player.player_id == cplayer.player_id:
                     # TODO: do_look
-                    await client.send_line(f"\r\nYou are in room {cplayer.room.rdef.name}")
+                    await client.send_line(f"\r\nYou are in room {cplayer.room.name}")
                 else:
                     pclient = self.clients[player.client_id]
-                    await pclient.send_line(f"{cplayer.pdef.name} arrives from {door.ddef.direction.arrives_opposite_long_name}.")
+                    await pclient.send_line(f"{cplayer.mdef.name} arrives from {direction.arrives_opposite_long_name}.")
             return cplayer
 
     def check_password_is_valid(self, password):
@@ -239,25 +240,26 @@ class Engine:
     # TODO: check to see if player is already active (linkdead, left logged in another terminal, etc.)
     async def load_player(self, client, player_def, to_room_id=None):
             if to_room_id: # player_def.last_room:
-                room = Room.get(rdef=RoomDefinition.get(id=to_room_id))
+                room = Room.get(room_id=to_room_id) # rdef=RoomDefinition.get(id=to_room_id))
             else:
-                adef = Area.get(name='The City of Chiiron')
-                rdef = Room.get(adef=adef, name='Fountain Square')
+                area = Area.get(name='The City of Chiiron')
+                room = Room.get(area=area, name='Fountain Square')
                 # room = Room.get(rdef=rdef)
-            cplayer = Player(mdef=PlayerDefinition.get(id=player_def.id), room=room, client_id = str(id(client))) # throws error if still loaded...
-            cplayer.pdef.last_room = room.rdef
+            # cplayer = Player(mdef=PlayerDefinition.get(pdef_id=player_def.id), room=room, client_id = str(id(client))) # throws error if still loaded...
+            cplayer = Player(mdef=player_def, room=room, client_id = str(id(client)))
+            cplayer.mdef.last_room = room
             # TODO: mob or room triggers on 'arriving' players?
-            for player in room.mobs.filter(lambda mob: isinstance(mob, Player)):
-                if player.id == cplayer.id:
+            for player in filter(lambda mob: isinstance(mob, Player), room.mobs):
+                if player.player_id == cplayer.player_id:
                     # TODO: do_look
-                    await client.send_line(f"\r\nYou are in room {cplayer.room.rdef.name}")
+                    await client.send_line(f"\r\nYou are in room {cplayer.room.name}")
                 else:
                     pclient = self.clients[player.client_id]
-                    await pclient.send_line(f"{cplayer.pdef.name} appears out of nowhere.") # TODO: bamfin?
+                    await pclient.send_line(f"{cplayer.mdef.name} appears out of nowhere.") # TODO: bamfin?
             return cplayer
 
     def create_player(self, name, password, race):
-            return PlayerDefinition(name=name, password=b64encode(bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())).decode('utf-8'), race=Race[race])
+            return PlayerDefinition(name=name, password=b64encode(bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())).decode('utf-8'), race=Race[race], last_room=None)
 
     async def shell(self, reader, writer):
         writer.iac(WONT, ECHO)
@@ -287,19 +289,21 @@ class Engine:
                 print(client_id, client, client.state)
                 # check resets/triggers
                 for area in Area.all(): # select(a for a in Area):
-                    print(f"Area: {area.adef.name}")
+                    print(f"Area: {area.name}")
                     for room in area.rooms:
-                        print(f"  Room: {room.rdef.name}")
-                        for obj in room.inventory:
+                        print(f"  Room: {room.name}")
+                        for obj in room.objects:
                             print(f"    Obj: {obj}")
                         for mob in room.mobs:
                             print(f"    Mob: {mob}")
                         # TODO: open/shut doors if reset tick?
                         # TODO: logic for WHEN to mload/oload...
-                        for mreset in room.rdef.mresets:
+                        for mreset in room.mresets:
+                            print(f"    mreset: {mreset}")
                             if not mreset.mob:
                                 await self.mload(room, mreset)
-                        for oreset in room.rdef.oresets:
+                        for oreset in room.oresets:
+                            print(f"    oreset: {oreset}")
                             if not oreset.obj:
                                 await self.oload(room, oreset)
                 # process event queue
