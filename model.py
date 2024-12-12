@@ -19,7 +19,7 @@ def next_id(dc):
         return next_id(dc)
     return _ids[dc]
 
-def auto(dc):
+def autonum(dc):
     return field(default_factory=partial(next_id, dc), metadata={"unique":True})
 
 # @kwdataclass
@@ -128,7 +128,7 @@ def default_attributes():
 @kwdataclass
 class Area(UniqueNamed):
     pk: ClassVar = 'area_id'
-    area_id: int = auto('Area') #  field(default_factory=partial(next_id, 'Area')) # auto('Area')
+    area_id: int = autonum('Area') #  field(default_factory=partial(next_id, 'Area')) # auto('Area')
     rooms: list['Room'] = field(init=False, default_factory=list)
     aflags: dict[AreaFlag, bool] = field(default_factory=default_aflags)
     # active_aflags: dict[AreaFlag, bool] = field(init=False, metadata={"copy":"aflags", "ephemeral":True})
@@ -150,7 +150,7 @@ def default_rflags():
 @kwdataclass
 class Room(Named):
     pk: ClassVar = 'room_id'
-    room_id: int = auto('Room')
+    room_id: int = autonum('Room')
     area: Area = field(metadata={"fkeycollection": "rooms"})
     default_rflags: dict[RoomFlag, bool] = field(default_factory=default_rflags)
     rflags: dict[RoomFlag, bool] = field(init=False, metadata={"copy":"default_rflags", "ephemeral":True})
@@ -207,7 +207,7 @@ class ObjectFlag(UniqueNamed, Described):
 @kwdataclass
 class ObjectDefinition(UniqueNamed, Described):
     pk: ClassVar = 'odef_id'
-    odef_id: int = auto('ObjectDefinition')
+    odef_id: int = autonum('ObjectDefinition')
     default_oflags: dict['ObjectFlag', bool] = field(default_factory=default_oflags)
 
 @kwdataclass
@@ -244,14 +244,14 @@ class MobBaseDefinition(UniqueNamed, Described): # TODO optionally described? fo
 @kwdataclass
 class MobDefinition(MobBaseDefinition):
     pk: ClassVar = 'mdef_id'
-    mdef_id: int = auto('MobDefinition')
+    mdef_id: int = autonum('MobDefinition')
     default_mflags: dict[MobFlag, bool] = field(default_factory=default_mflags)
     default_equipment: dict[EquipmentLocation, list['MobObjectReset']] = field(default_factory=dict)
 
 @kwdataclass
 class PlayerDefinition(MobBaseDefinition): # TODO: account, or email recovery, etc.
     pk: ClassVar = 'pdef_id'
-    pdef_id: int = auto('PlayerDefinition')
+    pdef_id: int = autonum('PlayerDefinition')
     password: str
     saved_attrs: dict['Attribute',int]
     saved_equipment: dict[EquipmentLocation, list['Object']] = field(default_factory=dict)
@@ -263,7 +263,7 @@ class Ephemeral:
 @kwdataclass
 class Object(Base): # TODO: optional renamed? NOTE: not ephemeral, it can be saved as part of a player file
     pk: ClassVar = 'obj_id'
-    obj_id: int = auto('Object')
+    obj_id: int = autonum('Object')
     odef: ObjectDefinition
     oflags: dict[ObjectFlag, bool] = field(init=False, metadata={"copy2":("odef","default_oflags")})
     # TODO condition, owner, actual durability if rolled, etc. is it +1 enchanted, etc.
