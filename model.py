@@ -54,7 +54,7 @@ class Base:
             if f.metadata:
                 for mkey, mval in f.metadata.items():
                     if mkey == "unique" and mval: # TODO ENUM
-                        if self.__class__.find(**{f.name:getattr(self, f.name)}):
+                        if self.__class__.select(**{f.name:getattr(self, f.name)}):
                             raise TypeError("violates unique")
                         else:
                             pass # TODO add to INDEX
@@ -72,32 +72,45 @@ class Base:
         # print("ALL:", cls)
         return _objects[cls.__qualname__] # TODO: return frozenlist or tuple or generator?
     @classmethod
-    def find(cls, **kwargs): # TODO use indexes if kwarg.key is a field we index
+    def select(cls, **kwargs): # TODO use indexes if kwarg.key is a field we index
         return [b for b in cls.all() if all(item in b.__dict__.items() for item in kwargs.items())]
+    @classmethod
+    def __class_getitem__(cls, pk):
+        return cls.get(**{cls.pk:pk})
+    @classmethod
     def get(cls, **kwargs):
-        dcs = cls.find(**kwargs)
+        dcs = cls.select(**kwargs)
         assert len(dcs) == 1
         return dcs[0]
+    @classmethod
+    def exists(cls, **kwargs):
+        dcs = cls.select(**kwargs)
+        return len(dcs)
 
 @kwdataclass
 class Named(Base):
     name: str # TODO unique?
     @classmethod
-    def find_by_name(cls, name):
-        return cls.find(name=name)
+    def select_by_name(cls, name):
+        return cls.select(name=name)
 
 @kwdataclass
 class UniqueNamed(Named):
     name: str = field(metadata={'unique':True}) # TODO: hook for trying to SET name
     @classmethod
     def get_by_name(cls, name):
-        dcs = cls.find_by_name(name)
+        dcs = cls.select_by_name(name)
         assert len(dcs) == 1
         return dcs[0]
 
 @kwdataclass
 class Described(Base):
     description: str
+
+@kwdataclass
+class Race(UniqueNamed, Described):
+    pk: ClassVar = 'name'
+    playable: bool = False
 
 # @kwdataclass
 # class DisplayNamed(Named):
@@ -166,12 +179,14 @@ class Room(Named):
 
 @kwdataclass
 class Direction(UniqueNamed):
+    pk: ClassVar = 'name'
     key: str = field(metadata={"unique":True, "abbreviation":("name",1)}, default=None)
     def __hash__(self):
         return hash(self.key)
 
 @kwdataclass
 class Attribute(UniqueNamed, Described): # TODO: if a new attr is added all MobDefinitions need it with default?
+    pk: ClassVar = 'name'
     key: str = field(metadata={"unique":True, "abbreviation":("name", 3)}, default=None) # allows "lux" override for luck?
     def __hash__(self):
         return hash(self.key)
@@ -239,6 +254,7 @@ class MobObjectReset(Base):
 
 @kwdataclass
 class MobBaseDefinition(UniqueNamed, Described): # TODO optionally described? for player?
+    race: 'Race'
     default_attrs: dict['Attribute',int|Dice] = field(default_factory=default_attributes)
 
 @kwdataclass
@@ -251,9 +267,10 @@ class MobDefinition(MobBaseDefinition):
 @kwdataclass
 class PlayerDefinition(MobBaseDefinition): # TODO: account, or email recovery, etc.
     pk: ClassVar = 'pdef_id'
+    description: str = None
     pdef_id: int = autonum('PlayerDefinition')
     password: str
-    saved_attrs: dict['Attribute',int]
+    saved_attrs: dict['Attribute',int] = field(default_factory=default_attributes) # TODO: remove this default and require on create/load
     saved_equipment: dict[EquipmentLocation, list['Object']] = field(default_factory=dict)
     # TODO: bank vault, etc.
 
@@ -283,6 +300,8 @@ class Mob(MobBase): # TODO: optional renamed?
 
 @kwdataclass
 class Player(MobBase):
+    # pk: ClassVar = 'pid'
+    # pid: int = autonum('Player')
     client: InitVar[Any] = None
     mdef: PlayerDefinition
     attrs: dict['Attribute',int] = field(init=False, metadata={"copy2":("mdef","saved_attrs")})

@@ -241,10 +241,10 @@ class Engine:
             if to_room_id: # player_def.last_room:
                 room = Room.get(rdef=RoomDefinition.get(id=to_room_id))
             else:
-                adef = AreaDefinition.get(name='The City of Chiiron')
-                rdef = RoomDefinition.get(adef=adef, name='Fountain Square')
-                room = Room.get(rdef=rdef)
-            cplayer = Player(pdef=PlayerDefinition.get(id=player_def.id), room=room, client_id = str(id(client))) # throws error if still loaded...
+                adef = Area.get(name='The City of Chiiron')
+                rdef = Room.get(adef=adef, name='Fountain Square')
+                # room = Room.get(rdef=rdef)
+            cplayer = Player(mdef=PlayerDefinition.get(id=player_def.id), room=room, client_id = str(id(client))) # throws error if still loaded...
             cplayer.pdef.last_room = room.rdef
             # TODO: mob or room triggers on 'arriving' players?
             for player in room.mobs.filter(lambda mob: isinstance(mob, Player)):
